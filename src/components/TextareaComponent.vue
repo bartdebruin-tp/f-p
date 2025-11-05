@@ -9,7 +9,8 @@ const textareaRef = ref(null)
 
 const props = defineProps({
   name: String,
-  description: String
+  description: String,
+  prompt: String
 })
 
 function createIdentifier(name) {
@@ -34,7 +35,7 @@ watch(model, async () => {
 
 async function generateWithAi() {
   try {
-    const text = await generateAiContent(props.name, factionStore.exportFaction())
+    const text = await generateAiContent(props.prompt)
     model.value = text
     await nextTick()
     adjustHeight()

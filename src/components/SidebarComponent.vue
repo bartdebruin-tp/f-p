@@ -1,12 +1,19 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { ArrowDownOnSquareIcon, CloudArrowDownIcon, CloudArrowUpIcon, TrashIcon } from '@heroicons/vue/24/solid'
+import { ArrowDownOnSquareIcon, CloudArrowDownIcon, CloudArrowUpIcon, TrashIcon, Cog6ToothIcon } from '@heroicons/vue/24/solid'
 import { useFactionStore } from '../stores/faction'
+
+const emit = defineEmits(['openSettings'])
 
 const factionStore = useFactionStore()
 const versions = ref([])
+const isVersionHistoryExpanded = ref(false)
 const STORAGE_KEY = 'faction-datamodel-versions'
 const MAX_VERSIONS = 10
+
+function toggleVersionHistory() {
+  isVersionHistoryExpanded.value = !isVersionHistoryExpanded.value
+}
 
 function loadVersionsFromStorage() {
   try {
@@ -85,6 +92,7 @@ function loadDatamodel() {
           localStorage.removeItem(STORAGE_KEY)
         } catch (err) {
           console.error('Error loading datamodel:', err)
+          alert('Error loading file')
         }
       }
       reader.readAsText(file)
@@ -163,6 +171,12 @@ onMounted(() => {
               </button>
           </li>
           <li>
+              <button @click="$emit('openSettings')" type="button" class="flex items-center w-full p-2 text-base font-normal text-gray-900 rounded-lg dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 group">
+                  <Cog6ToothIcon class="size-6" />
+                  <span class="ml-3">Settings</span>
+              </button>
+          </li>
+          <li>
               <button @click="clearDatamodel" type="button" class="flex items-center w-full p-2 text-base font-normal text-red-600 rounded-lg dark:text-red-400 hover:bg-red-50 dark:hover:bg-gray-700 group">
                   <TrashIcon class="size-6" />
                   <span class="ml-3">Clear Data</span>
@@ -197,8 +211,23 @@ onMounted(() => {
           </li> -->
       </ul>
       <div class="pt-5 mt-5 space-y-2 border-t border-gray-200 dark:border-gray-700">
-        <h3 class="text-sm font-semibold text-gray-500 uppercase dark:text-gray-400">Version History</h3>
-        <ul id="version-history" class=" space-y-2">
+        <button 
+          @click="toggleVersionHistory" 
+          type="button"
+          class="flex items-center justify-between w-full text-sm font-semibold text-gray-500 uppercase dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+        >
+          <span>Version History</span>
+          <svg 
+            :class="{'rotate-180': isVersionHistoryExpanded}" 
+            class="w-4 h-4 transition-transform duration-200" 
+            fill="currentColor" 
+            viewBox="0 0 20 20" 
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+          </svg>
+        </button>
+        <ul v-show="isVersionHistoryExpanded" id="version-history" class="space-y-2">
             <li v-if="versions.length === 0" class="p-2 text-sm text-gray-500 dark:text-gray-400">
             No saved versions
             </li>
