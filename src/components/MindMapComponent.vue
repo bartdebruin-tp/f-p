@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { useFactionStore } from '../stores/faction'
+import UpdateOrganizationNodePopupComponent from './UpdateOrganizationNodePopupComponent.vue'
 
 const factionStore = useFactionStore()
 
@@ -14,12 +15,17 @@ const connections = reactive([])
 const selectedNode = ref(null)
 const draggingNode = ref(null)
 const dragOffset = reactive({ x: 0, y: 0 })
-const connectingFrom = ref(null)
 const hoveredNode = ref(null)
 const canvasSize = reactive({ width: 0, height: 0 })
 const editingNode = ref(null)
 const editText = ref('')
 const inlineInput = ref(null)
+
+// Modal state
+const isModalOpen = ref(false)
+const modalMode = ref('add') // 'add' or 'edit'
+const currentNodeId = ref(null)
+const currentParentId = ref(null)
 
 // Mouse state
 const mousePos = reactive({ x: 0, y: 0 })
@@ -28,6 +34,12 @@ const mousePos = reactive({ x: 0, y: 0 })
 const isPanning = ref(false)
 const panOffset = reactive({ x: 0, y: 0 })
 const panStart = reactive({ x: 0, y: 0 })
+
+// Tooltip state
+const tooltipVisible = ref(false)
+const tooltipContent = reactive({ name: '', role: '', description: '' })
+const tooltipPos = reactive({ x: 0, y: 0 })
+let tooltipTimeout = null
 
 let nextNodeId = 1
 let isLoadingFromDatamodel = false
@@ -227,11 +239,14 @@ const syncToDatamodel = () => {
     const parentConnection = connections.find(c => c.to === node.id)
     const manager = parentConnection ? parentConnection.from : null
     
+    // Preserve existing data from store if it exists
+    const existingData = factionStore.pyramid[node.id] || {}
+    
     newPyramid[node.id] = {
       name: node.text,
       manager: manager || '',
-      role: '',
-      tooltip: node.text,
+      role: existingData.role || '',
+      description: existingData.description || '',
       x: node.x,
       y: node.y
     }
@@ -326,13 +341,8 @@ const handleCanvasMouseDown = (e) => {
   const node = getNodeAtPosition(x, y)
   
   if (e.shiftKey && node) {
-    // Shift + click to start connection
-    if (!connectingFrom.value) {
-      connectingFrom.value = node
-    } else {
-      addConnection(connectingFrom.value.id, node.id)
-      connectingFrom.value = null
-    }
+    // Shift + click to open edit popup
+    openEditModal(node.id)
   } else if (node) {
     // Start dragging
     draggingNode.value = node
@@ -342,7 +352,6 @@ const handleCanvasMouseDown = (e) => {
   } else {
     // Deselect
     selectedNode.value = null
-    connectingFrom.value = null
   }
   
   draw()
@@ -356,17 +365,24 @@ const handleCanvasMouseMove = (e) => {
   if (isPanning.value) {
     panOffset.x = mousePos.x - panStart.x
     panOffset.y = mousePos.y - panStart.y
+    hideTooltip()
     draw()
   } else if (draggingNode.value) {
     draggingNode.value.x = mousePos.x - panOffset.x - dragOffset.x
     draggingNode.value.y = mousePos.y - panOffset.y - dragOffset.y
+    hideTooltip()
     draw()
   } else {
     // Update hovered node for cursor feedback
     const node = getNodeAtPosition(mousePos.x, mousePos.y)
+    const prevHovered = hoveredNode.value
     hoveredNode.value = node
-    if (connectingFrom.value) {
-      draw()
+    
+    // Handle tooltip
+    if (node && node !== prevHovered) {
+      showTooltip(node, e.clientX, e.clientY)
+    } else if (!node) {
+      hideTooltip()
     }
   }
 }
@@ -378,6 +394,10 @@ const handleCanvasMouseUp = () => {
   }
   draggingNode.value = null
   isPanning.value = false
+}
+
+const handleCanvasMouseLeave = () => {
+  hideTooltip()
 }
 
 const handleCanvasDoubleClick = (e) => {
@@ -451,22 +471,9 @@ const draw = () => {
     }
   })
   
-  // Draw connecting line preview
-  if (connectingFrom.value) {
-    ctx.value.strokeStyle = '#10b981'
-    ctx.value.lineWidth = 2
-    ctx.value.setLineDash([5, 5])
-    ctx.value.beginPath()
-    ctx.value.moveTo(connectingFrom.value.x, connectingFrom.value.y)
-    ctx.value.lineTo(mousePos.x - panOffset.x, mousePos.y - panOffset.y)
-    ctx.value.stroke()
-    ctx.value.setLineDash([])
-  }
-  
   // Draw nodes
   nodes.forEach(node => {
     const isSelected = selectedNode.value?.id === node.id
-    const isConnecting = connectingFrom.value?.id === node.id
     const isHovered = hoveredNode.value?.id === node.id
     
     // Shadow for depth
@@ -488,10 +495,7 @@ const draw = () => {
     ctx.value.fill()
     
     // Border
-    if (isConnecting) {
-      ctx.value.strokeStyle = '#10b981'
-      ctx.value.lineWidth = 3
-    } else if (isSelected) {
+    if (isSelected) {
       ctx.value.strokeStyle = '#1d4ed8'
       ctx.value.lineWidth = 2
     } else {
@@ -657,18 +661,92 @@ const handleKeyDown = (e) => {
       deleteSelectedNode()
     }
   } else if (e.key === 'Escape') {
-    connectingFrom.value = null
     selectedNode.value = null
     draw()
-  } else if (e.key === 'Enter' && selectedNode.value) {
+  } else if (e.key === 'Enter' && e.shiftKey && selectedNode.value) {
     createChildNode()
   }
+}
+
+// Modal functions
+const openEditModal = (nodeId) => {
+  modalMode.value = 'edit'
+  currentNodeId.value = nodeId
+  currentParentId.value = null
+  isModalOpen.value = true
+}
+
+const openAddModal = (parentId) => {
+  modalMode.value = 'add'
+  currentParentId.value = parentId
+  currentNodeId.value = null
+  isModalOpen.value = true
+}
+
+const closeModal = () => {
+  isModalOpen.value = false
+}
+
+const onSaveNode = () => {
+  // Reload from datamodel after save
+  loadFromDatamodel()
+}
+
+const onDeleteNode = () => {
+  // Reload from datamodel after delete
+  loadFromDatamodel()
+}
+
+// Tooltip functions
+const showTooltip = (node, clientX, clientY) => {
+  // Clear any existing timeout
+  if (tooltipTimeout) {
+    clearTimeout(tooltipTimeout)
+  }
+  
+  // Set a delay before showing tooltip
+  tooltipTimeout = setTimeout(() => {
+    // Get node data from store
+    const nodeData = factionStore.pyramid[node.id]
+    
+    if (nodeData) {
+      tooltipContent.name = nodeData.name || node.text
+      tooltipContent.role = nodeData.role || ''
+      tooltipContent.description = nodeData.description || ''
+    } else {
+      tooltipContent.name = node.text
+      tooltipContent.role = ''
+      tooltipContent.description = ''
+    }
+    
+    // Position tooltip near cursor
+    tooltipPos.x = clientX + 15
+    tooltipPos.y = clientY + 15
+    tooltipVisible.value = true
+  }, 500) // 500ms delay
+}
+
+const hideTooltip = () => {
+  if (tooltipTimeout) {
+    clearTimeout(tooltipTimeout)
+    tooltipTimeout = null
+  }
+  tooltipVisible.value = false
 }
 
 </script>
 
 <template>
   <div class="mindmap-container">
+    <UpdateOrganizationNodePopupComponent 
+      :isOpen="isModalOpen"
+      :nodeId="currentNodeId"
+      :parentId="currentParentId"
+      :mode="modalMode"
+      @close="closeModal"
+      @save="onSaveNode"
+      @delete="onDeleteNode"
+    />
     <div class="toolbar">
       <div class="toolbar-section">
         <button @click="createChildNode" :disabled="!selectedNode" class="btn btn-primary">
@@ -689,7 +767,7 @@ const handleKeyDown = (e) => {
           <kbd>Double Click</kbd> Edit/Create
         </div>
         <div class="instruction-item">
-          <kbd>Shift + Click</kbd> Connect nodes
+          <kbd>Shift + Click</kbd> Edit node
         </div>
         <div class="instruction-item">
           <kbd>Middle Click</kbd> Pan view
@@ -698,7 +776,7 @@ const handleKeyDown = (e) => {
           <kbd>Drag</kbd> Move nodes
         </div>
         <div class="instruction-item">
-          <kbd>Enter</kbd> Add child
+          <kbd>Shift+Enter</kbd> Add child
         </div>
         <div class="instruction-item">
           <kbd>Del</kbd> Delete
@@ -709,16 +787,16 @@ const handleKeyDown = (e) => {
     <div 
       ref="canvasContainer" 
       class="canvas-container"
-      :class="{ 'connecting-mode': connectingFrom }"
     >
       <canvas
         ref="canvasRef"
         @mousedown="handleCanvasMouseDown"
         @mousemove="handleCanvasMouseMove"
         @mouseup="handleCanvasMouseUp"
+        @mouseleave="handleCanvasMouseLeave"
         @dblclick="handleCanvasDoubleClick"
         @contextmenu.prevent
-        :style="{ cursor: isPanning ? 'grabbing' : hoveredNode ? 'pointer' : connectingFrom ? 'crosshair' : 'default' }"
+        :style="{ cursor: isPanning ? 'grabbing' : hoveredNode ? 'pointer' : 'default' }"
       ></canvas>
       
       <!-- Inline text editor -->
@@ -738,6 +816,20 @@ const handleKeyDown = (e) => {
         }"
         ref="inlineInput"
       />
+      
+      <!-- Tooltip -->
+      <div
+        v-if="tooltipVisible"
+        class="tooltip"
+        :style="{
+          left: tooltipPos.x + 'px',
+          top: tooltipPos.y + 'px'
+        }"
+      >
+        <div class="tooltip-name">{{ tooltipContent.name }}</div>
+        <div v-if="tooltipContent.role" class="tooltip-role">{{ tooltipContent.role }}</div>
+        <div v-if="tooltipContent.description" class="tooltip-text">{{ tooltipContent.description }}</div>
+      </div>
     </div>
   </div>
 </template>
@@ -880,10 +972,6 @@ kbd {
   width: 100%;
 }
 
-.canvas-container.connecting-mode {
-  cursor: crosshair;
-}
-
 canvas {
   display: block;
   width: 100%;
@@ -908,5 +996,39 @@ canvas {
 
 .inline-editor::placeholder {
   color: rgba(255, 255, 255, 0.6);
+}
+
+.tooltip {
+  position: fixed;
+  background: #1e293b;
+  color: #ffffff;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10000;
+  pointer-events: none;
+  max-width: 300px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.tooltip-name {
+  font-weight: bold;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.tooltip-role {
+  color: #94a3b8;
+  font-style: italic;
+  margin-bottom: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.tooltip-text {
+  color: #cbd5e1;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #475569;
 }
 </style>

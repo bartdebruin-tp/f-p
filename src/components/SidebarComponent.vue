@@ -18,7 +18,6 @@ function toggleVersionHistory() {
 function loadVersionsFromStorage() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    console.log('Loaded versions from storage:', JSON.parse(stored))
     if (stored) {
       versions.value = JSON.parse(stored)
     }

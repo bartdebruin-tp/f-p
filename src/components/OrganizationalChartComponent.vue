@@ -58,7 +58,7 @@ const drawChart = () => {
   data.addColumn('string', 'ToolTip')
 
   // Helper function to create a row for the chart
-  const createChartRow = (nodeId, name, manager, role, tooltip) => {
+  const createChartRow = (nodeId, name, manager, role, description) => {
     const addButton = `<button onclick="event.stopPropagation(); window.addNodeHandler('${nodeId}')" class="bg-blue-500 text-white hover:bg-blue-600" style="margin-left: 8px; padding: 2px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">+</button>`
     const nameSpan = `<div onclick="window.editNodeHandler('${nodeId}')" class="cursor-pointer hover:underline">${name}</div>`
     
@@ -66,13 +66,13 @@ const drawChart = () => {
       return [
         { v: nodeId, f: `${nameSpan}<div class="text-gray-400 text-sm italic">${role}</div>${addButton}` },
         manager,
-        tooltip
+        description
       ]
     } else {
       return [
         { v: nodeId, f: `${nameSpan}${addButton}` },
         manager,
-        tooltip
+        description
       ]
     }
   }
@@ -87,10 +87,10 @@ const drawChart = () => {
     for (const [nodeId, nodeData] of Object.entries(pyramidData)) {
       const name = nodeData.name || nodeId
       const manager = nodeData.manager || ''
-      const tooltip = nodeData.tooltip || nodeData.role || ''
+      const description = nodeData.description || nodeData.role || ''
       const role = nodeData.role || ''
       
-      rows.push(createChartRow(nodeId, name, manager, role, tooltip))
+      rows.push(createChartRow(nodeId, name, manager, role, description))
     }
   } else {
     // Default sample data if pyramid is empty
@@ -104,14 +104,14 @@ const drawChart = () => {
       ['Agent4', 'Lieutenant2', '', 'Field operative']
     ]
 
-    sampleData.forEach(([id, manager, role, tooltip]) => {
+    sampleData.forEach(([id, manager, role, description]) => {
       const name = id.replace(/([A-Z])/g, ' $1').trim()
       
-      rows.push(createChartRow(id, name, manager, role, tooltip))
+      rows.push(createChartRow(id, name, manager, role, description))
 
       // Initialize datamodel with sample data if empty
       if (!factionStore.pyramid[id]) {
-        factionStore.pyramid[id] = { name, manager, role, tooltip }
+        factionStore.pyramid[id] = { name, manager, role, description }
       }
     })
   }

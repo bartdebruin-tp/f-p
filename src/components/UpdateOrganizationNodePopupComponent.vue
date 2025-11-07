@@ -27,7 +27,7 @@ const emit = defineEmits(['close', 'save', 'delete'])
 
 const nodeName = ref('')
 const nodeRole = ref('')
-const nodeTooltip = ref('')
+const nodeDescription = ref('')
 
 // Check if the node has children
 const hasChildren = () => {
@@ -46,12 +46,12 @@ watch(() => props.isOpen, (newVal) => {
       const currentData = factionStore.pyramid[props.nodeId]
       nodeName.value = currentData.name || ''
       nodeRole.value = currentData.role || ''
-      nodeTooltip.value = currentData.tooltip || ''
+      nodeDescription.value = currentData.description || ''
     } else {
       // Reset form for add mode
       nodeName.value = ''
       nodeRole.value = ''
-      nodeTooltip.value = ''
+      nodeDescription.value = ''
     }
   }
 })
@@ -78,7 +78,7 @@ const saveNode = () => {
       name: nodeName.value.trim(),
       manager: props.parentId || '',
       role: nodeRole.value.trim(),
-      tooltip: nodeTooltip.value.trim()
+      description: nodeDescription.value.trim()
     }
   } else if (props.mode === 'edit' && props.nodeId) {
     // Update existing node
@@ -87,7 +87,7 @@ const saveNode = () => {
       ...currentData,
       name: nodeName.value.trim(),
       role: nodeRole.value.trim(),
-      tooltip: nodeTooltip.value.trim()
+      description: nodeDescription.value.trim()
     }
   }
 
@@ -170,13 +170,13 @@ const deleteNode = () => {
                         >
                     </div>
                     <div>
-                        <label for="tooltip" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Tooltip</label>
+                        <label for="description" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Description</label>
                         <textarea 
-                          v-model="nodeTooltip"
-                          id="tooltip" 
+                          v-model="nodeDescription"
+                          id="description" 
                           rows="3" 
                           class="block p-2.5 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-primary-500 dark:focus:border-primary-500" 
-                          placeholder="Enter tooltip (optional)"
+                          placeholder="Enter description (optional)"
                         ></textarea>                    
                     </div>
                 </div>
